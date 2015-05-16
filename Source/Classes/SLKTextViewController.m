@@ -29,6 +29,7 @@ NSString * const SLKKeyboardDidHideNotification =   @"SLKKeyboardDidHideNotifica
     CGFloat _keyboardHeightBeforeDragging;
 }
 
+@property (nonatomic, weak) IBOutlet UITableView *tableView;
 // The shared scrollView pointer, either a tableView or collectionView
 @property (nonatomic, weak) UIScrollView *scrollViewProxy;
 
@@ -69,7 +70,6 @@ NSString * const SLKKeyboardDidHideNotification =   @"SLKKeyboardDidHideNotifica
 @end
 
 @implementation SLKTextViewController
-@synthesize tableView = _tableView;
 @synthesize collectionView = _collectionView;
 @synthesize scrollView = _scrollView;
 @synthesize typingIndicatorView = _typingIndicatorView;
@@ -136,19 +136,15 @@ NSString * const SLKKeyboardDidHideNotification =   @"SLKKeyboardDidHideNotifica
     
     if (self = [super initWithCoder:decoder])
     {
-        UITableViewStyle tableViewStyle = [[self class] tableViewStyleForCoder:decoder];
-        UICollectionViewLayout *collectionViewLayout = [[self class] collectionViewLayoutForCoder:decoder];
-        
-        if ([collectionViewLayout isKindOfClass:[UICollectionViewLayout class]]) {
-            self.scrollViewProxy = [self collectionViewWithLayout:collectionViewLayout];
-        }
-        else {
-            self.scrollViewProxy = [self tableViewWithStyle:tableViewStyle];
-        }
-        
         [self slk_commonInit];
     }
     return self;
+}
+
+- (void)setTableView:(UITableView *)tableView
+{
+    _tableView = tableView;
+    self.scrollViewProxy = _tableView;
 }
 
 - (void)slk_commonInit
@@ -156,7 +152,7 @@ NSString * const SLKKeyboardDidHideNotification =   @"SLKKeyboardDidHideNotifica
     [self slk_registerNotifications];
     
     self.bounces = YES;
-    self.inverted = YES;
+    self.inverted = NO;
     self.shakeToClearEnabled = NO;
     self.keyboardPanningEnabled = YES;
     self.shouldClearTextAtRightButtonPress = YES;
@@ -167,21 +163,23 @@ NSString * const SLKKeyboardDidHideNotification =   @"SLKKeyboardDidHideNotifica
 
 #pragma mark - View lifecycle
 
-- (void)loadView
-{
-    [super loadView];
-        
-    [self.view addSubview:self.scrollViewProxy];
-    [self.view addSubview:self.autoCompletionView];
-    [self.view addSubview:self.typingIndicatorView];
-    [self.view addSubview:self.textInputbar];
-    
-    [self slk_setupViewConstraints];
-}
-
 - (void)viewDidLoad
 {
     [super viewDidLoad];
+
+    self.scrollViewProxy.translatesAutoresizingMaskIntoConstraints = NO;
+    NSArray *constraints = self.view.constraints;
+    for (NSLayoutConstraint *constraint in constraints) {
+        if ([constraint.firstItem isEqual:self.scrollViewProxy] ||
+            [constraint.secondItem isEqual:self.scrollViewProxy]) {
+            [self.view removeConstraint:constraint];
+        }
+    }
+    [self.view addSubview:self.autoCompletionView];
+    [self.view addSubview:self.typingIndicatorView];
+    [self.view addSubview:self.textInputbar];
+
+    [self slk_setupViewConstraints];
 }
 
 - (void)viewWillAppear:(BOOL)animated
@@ -886,7 +884,15 @@ NSString * const SLKKeyboardDidHideNotification =   @"SLKKeyboardDidHideNotifica
 
 - (CGFloat)maximumHeightForAutoCompletionView
 {
-    return 140.0;
+    CGFloat maxiumumHeight = 140.0;
+    CGFloat scrollViewHeight = self.scrollViewHC.constant;
+    scrollViewHeight -= [self slk_topBarsHeight];
+
+    if (scrollViewHeight < maxiumumHeight) {
+        maxiumumHeight = scrollViewHeight;
+    }
+    
+    return maxiumumHeight;
 }
 
 - (void)didPasteMediaContent:(NSDictionary *)userInfo
@@ -1183,7 +1189,11 @@ NSString * const SLKKeyboardDidHideNotification =   @"SLKKeyboardDidHideNotifica
     }
     
     // Updates the height constraints' constants
+    CGFloat diff = self.keyboardHC.constant;
     self.keyboardHC.constant = [self slk_appropriateKeyboardHeight:notification];
+    if (!self.inverted) {
+        diff -= self.keyboardHC.constant;
+    }
     self.scrollViewHC.constant = [self slk_appropriateScrollViewHeight];
     
     // Updates and notifies about the keyboard status update
@@ -1191,12 +1201,23 @@ NSString * const SLKKeyboardDidHideNotification =   @"SLKKeyboardDidHideNotifica
         // Posts custom keyboard notification, if logical conditions apply
         [self slk_postKeyboarStatusNotification:notification];
     }
-    
+  
+    CGPoint offset = self.scrollViewProxy.contentOffset;
+    if (!self.inverted) {
+        offset.y -= diff;
+        if (offset.y < -self.scrollViewProxy.contentInset.top) {
+            offset.y = -self.scrollViewProxy.contentInset.top;
+        }
+    }
+  
     // Only for this animation, we set bo to bounce since we want to give the impression that the text input is glued to the keyboard.
     [self.view slk_animateLayoutIfNeededWithDuration:duration
                                               bounce:NO
                                              options:(curve<<16)|UIViewAnimationOptionLayoutSubviews|UIViewAnimationOptionBeginFromCurrentState
                                           animations:^{
+                                              if (!self.inverted) {
+                                                  self.scrollViewProxy.contentOffset = offset;
+                                              }
                                               [self slk_scrollToBottomIfNeeded];
                                           }];
 }
@@ -1574,8 +1595,10 @@ NSString * const SLKKeyboardDidHideNotification =   @"SLKKeyboardDidHideNotifica
     }
     
     // If the auto-completion view height is bigger than the maximum height allows, it is reduce to that size. Default 140 pts.
-    if (viewHeight > [self maximumHeightForAutoCompletionView]) {
-        viewHeight = [self maximumHeightForAutoCompletionView];
+    CGFloat maximumHeight = [self maximumHeightForAutoCompletionView];
+    
+    if (viewHeight > maximumHeight) {
+        viewHeight = maximumHeight;
     }
     
     CGFloat tableHeight = self.scrollViewHC.constant + self.autoCompletionViewHC.constant;

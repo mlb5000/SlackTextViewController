@@ -47,7 +47,7 @@ typedef NS_ENUM(NSUInteger, SLKKeyboardStatus) {
 NS_CLASS_AVAILABLE_IOS(7_0) @interface SLKTextViewController : UIViewController <UITextViewDelegate, UITableViewDelegate, UITableViewDataSource, UICollectionViewDelegate, UICollectionViewDataSource, UIGestureRecognizerDelegate, UIAlertViewDelegate>
 
 /** The main table view managed by the controller object. Created by default initializing with -init or initWithNibName:bundle: */
-@property (nonatomic, readonly) UITableView *tableView;
+@property (nonatomic, weak, readonly) IBOutlet UITableView *tableView;
 
 /** The main collection view managed by the controller object. Not nil if the controller is initialised with -initWithCollectionViewLayout: */
 @property (nonatomic, readonly) UICollectionView *collectionView;

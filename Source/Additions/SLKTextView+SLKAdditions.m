@@ -21,7 +21,8 @@
 - (void)slk_clearText:(BOOL)clearUndo
 {
     [super setText:nil];
-    
+    [[NSNotificationCenter defaultCenter] postNotificationName:UITextViewTextDidChangeNotification object:self];
+  
     if (self.undoManagerEnabled && clearUndo) {
         [self.undoManager removeAllActions];
     }
